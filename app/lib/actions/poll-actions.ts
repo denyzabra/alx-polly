@@ -1,9 +1,35 @@
 "use server";
 
+/**
+ * @fileoverview Poll management actions for creating, updating, and interacting with polls
+ * 
+ * This module provides server actions for handling poll operations including
+ * creating new polls, fetching polls, submitting votes, and managing poll data.
+ * It implements proper authorization checks to ensure users can only modify
+ * their own polls and includes data validation for all operations.
+ * 
+ * All database operations use Supabase as the underlying data store.
+ */
+
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 
-// CREATE POLL
+/**
+ * Creates a new poll with the provided form data
+ * 
+ * This function creates a new poll in the database with the specified question
+ * and options. It first verifies that the user is authenticated, then creates
+ * the poll record with the user's ID and the provided poll details.
+ * 
+ * @param formData - FormData object containing the poll question and options
+ * @returns Object with error status (null if successful)
+ * @example
+ * // In a form submit handler:
+ * const result = await createPoll(formData);
+ * if (!result.error) {
+ *   // Poll created successfully
+ * }
+ */
 export async function createPoll(formData: FormData) {
   const supabase = await createClient();
 

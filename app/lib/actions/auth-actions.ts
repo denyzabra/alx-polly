@@ -1,5 +1,16 @@
 'use server';
 
+/**
+ * @fileoverview Authentication actions for user login, registration, and session management
+ * 
+ * This module provides server actions for handling user authentication flows including
+ * login, registration, logout, and session management. It implements several security
+ * features including rate limiting, account lockout, device fingerprinting, and
+ * suspicious activity detection to protect against common authentication attacks.
+ * 
+ * All authentication operations use Supabase Auth as the underlying authentication provider.
+ */
+
 import { createClient } from '@/lib/supabase/server';
 import { LoginFormData, RegisterFormData } from '../types';
 import { checkEmailRateLimit, checkIpRateLimit } from '../utils/rate-limiter';
@@ -8,6 +19,21 @@ import { AuthErrorType, logAuthError, parseAuthError, trackFailedAttempt, resetF
 import { cookies } from 'next/headers';
 import { headers } from 'next/headers';
 
+/**
+ * Authenticates a user with email and password
+ * 
+ * This function handles user login with multiple security measures:
+ * 1. Applies rate limiting by IP address and email
+ * 2. Checks if the account is locked due to too many failed attempts
+ * 3. Validates credentials against Supabase Auth
+ * 4. Tracks failed attempts and resets counter on success
+ * 5. Performs device fingerprinting to detect new devices
+ * 6. Checks for suspicious activity patterns
+ * 
+ * @param data - Object containing email and password
+ * @param clientIp - Optional IP address of the client
+ * @returns Object with error message if login fails
+ */
 export async function login(data: LoginFormData, clientIp?: string) {
   // Apply rate limiting
   const headersList = await headers();
@@ -80,6 +106,20 @@ await resetFailedAttempts(data.email);
   return { error: null };
 }
 
+/**
+ * Registers a new user account
+ * 
+ * This function handles new user registration with security measures:
+ * 1. Applies rate limiting by IP address and email to prevent abuse
+ * 2. Creates a new user account in Supabase Auth
+ * 3. Stores additional user metadata including name
+ * 4. Records the device information for future verification
+ * 5. Handles and logs authentication errors
+ * 
+ * @param data - Object containing email, password and name
+ * @param clientIp - Optional IP address of the client
+ * @returns Object with error message if registration fails
+ */
 export async function register(data: RegisterFormData, clientIp?: string) {
   try {
     // Apply rate limiting
@@ -136,6 +176,20 @@ export async function register(data: RegisterFormData, clientIp?: string) {
     return { error: 'An unexpected error occurred. Please try again later.' };
   }
 }
+/**
+ * Logs out the current user and ends their session
+ * 
+ * This function signs the user out of their current session using Supabase Auth
+ * and handles any errors that might occur during the logout process.
+ * 
+ * @returns Object with error message if logout fails, or null on success
+ * @example
+ * // In a logout button handler:
+ * const result = await logout();
+ * if (result.error) {
+ *   // Handle error
+ * }
+ */
 export async function logout() {
   const supabase = await createClient();
   const { error } = await supabase.auth.signOut();
@@ -145,12 +199,41 @@ export async function logout() {
   return { error: null };
 }
 
+/**
+ * Retrieves the currently authenticated user
+ * 
+ * This function fetches the current user's information from their active session.
+ * It's useful for getting user details for display or authorization checks.
+ * 
+ * @returns The current user object or null if not authenticated
+ * @example
+ * // In a server component:
+ * const user = await getCurrentUser();
+ * if (user) {
+ *   // User is authenticated
+ * }
+ */
 export async function getCurrentUser() {
   const supabase = await createClient();
   const { data } = await supabase.auth.getUser();
   return data.user;
 }
 
+/**
+ * Retrieves the current authentication session
+ * 
+ * This function gets the active session data including the access token,
+ * refresh token, and user information. It's useful for checking authentication
+ * status and getting session tokens for API calls.
+ * 
+ * @returns The current session object or null if not authenticated
+ * @example
+ * // In a server component:
+ * const session = await getSession();
+ * if (session) {
+ *   // User has an active session
+ * }
+ */
 export async function getSession() {
   const supabase = await createClient();
   const { data } = await supabase.auth.getSession();
