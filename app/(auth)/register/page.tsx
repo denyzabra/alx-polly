@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,6 +11,22 @@ import { register } from '@/app/lib/actions/auth-actions';
 export default function RegisterPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [clientIp, setClientIp] = useState<string | null>(null);
+  
+  // Get client IP on component mount
+  useEffect(() => {
+    const getClientIp = async () => {
+      try {
+        const response = await fetch('https://api.ipify.org?format=json');
+        const data = await response.json();
+        setClientIp(data.ip);
+      } catch (error) {
+        console.error('Failed to get client IP:', error);
+      }
+    };
+    
+    getClientIp();
+  }, []);
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -28,7 +44,7 @@ export default function RegisterPage() {
       return;
     }
 
-    const result = await register({ name, email, password });
+    const result = await register({ name, email, password }, clientIp || undefined);
 
     if (result?.error) {
       setError(result.error);

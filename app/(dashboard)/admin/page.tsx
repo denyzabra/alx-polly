@@ -1,7 +1,3 @@
-"use client";
-
-import { useState, useEffect } from "react";
-import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -9,54 +5,38 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { deletePoll } from "@/app/lib/actions/poll-actions";
-import { createClient } from "@/lib/supabase/client";
+import { createClient } from "@/lib/supabase/server";
+import { DeletePollButton } from "./components/DeletePollButton";
+import React from "react";
+// The layout.tsx file handles the authorization check
 
 interface Poll {
   id: string;
   question: string;
   user_id: string;
   created_at: string;
-  options: string[];
+  options: { text: string; votes: number }[];
 }
 
-export default function AdminPage() {
-  const [polls, setPolls] = useState<Poll[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [deleteLoading, setDeleteLoading] = useState<string | null>(null);
-
-  useEffect(() => {
-    fetchAllPolls();
-  }, []);
-
-  const fetchAllPolls = async () => {
-    const supabase = createClient();
-
-    const { data, error } = await supabase
-      .from("polls")
-      .select("*")
-      .order("created_at", { ascending: false });
-
-    if (!error && data) {
-      setPolls(data);
-    }
-    setLoading(false);
-  };
-
-  const handleDelete = async (pollId: string) => {
-    setDeleteLoading(pollId);
-    const result = await deletePoll(pollId);
-
-    if (!result.error) {
-      setPolls(polls.filter((poll) => poll.id !== pollId));
-    }
-
-    setDeleteLoading(null);
-  };
-
-  if (loading) {
-    return <div className="p-6">Loading all polls...</div>;
+async function getAllPolls() {
+  const supabase = await createClient();
+  
+  const { data, error } = await supabase
+    .from("polls")
+    .select("*")
+    .order("created_at", { ascending: false });
+    
+  if (error) {
+    console.error('Error fetching polls:', error);
+    return [];
   }
+  
+  return data || [];
+}
+
+export default async function AdminPage() {
+  // Fetch all polls server-side
+  const polls = await getAllPolls();
 
   return (
     <div className="p-6 space-y-6">
@@ -95,23 +75,16 @@ export default function AdminPage() {
                     </div>
                   </CardDescription>
                 </div>
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  onClick={() => handleDelete(poll.id)}
-                  disabled={deleteLoading === poll.id}
-                >
-                  {deleteLoading === poll.id ? "Deleting..." : "Delete"}
-                </Button>
+                <DeletePollButton pollId={poll.id} />
               </div>
             </CardHeader>
             <CardContent>
               <div className="space-y-2">
                 <h4 className="font-medium">Options:</h4>
                 <ul className="list-disc list-inside space-y-1">
-                  {poll.options.map((option, index) => (
+                  {poll.options.map((option: { text: string; votes: number }, index: number) => (
                     <li key={index} className="text-gray-700">
-                      {option}
+                      {option.text} ({option.votes} votes)
                     </li>
                   ))}
                 </ul>
