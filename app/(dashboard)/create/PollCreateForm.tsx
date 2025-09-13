@@ -1,19 +1,18 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
-import { createPoll } from "@/app/lib/actions/poll-actions";
+import { useState, useEffect } from "react";
+import { useActionState } from "react";
+import { createPollAction } from "@/app/lib/actions/poll-actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Loader2 } from "lucide-react";
+import { toast } from "sonner";
 
 export default function PollCreateForm() {
-  const router = useRouter();
   const [options, setOptions] = useState(["", ""]);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState(false);
-  const [isPending, startTransition] = useTransition();
+  
+  const [state, formAction, isPending] = useActionState(createPollAction, { error: null });
 
   const handleOptionChange = (idx: number, value: string) => {
     setOptions((opts) => opts.map((opt, i) => (i === idx ? value : opt)));
@@ -26,28 +25,15 @@ export default function PollCreateForm() {
     }
   };
 
+  useEffect(() => {
+    if (state?.error) {
+      toast.error(state.error);
+    }
+  }, [state]);
+
   return (
     <form
-      action={async (formData) => {
-        setError(null);
-        setSuccess(false);
-        
-        startTransition(async () => {
-          try {
-            const res = await createPoll(formData);
-            if (res?.error) {
-              setError(res.error);
-            } else {
-              setSuccess(true);
-              setTimeout(() => {
-                router.push("/polls");
-              }, 1200);
-            }
-          } catch (err) {
-            setError(err instanceof Error ? err.message : 'An unexpected error occurred');
-          }
-        });
-      }}
+      action={formAction}
       className="space-y-6 max-w-md mx-auto"
     >
       <div>
@@ -86,11 +72,10 @@ export default function PollCreateForm() {
           Add Option
         </Button>
       </div>
-      {error && <div className="text-red-500">{error}</div>}
-      {success && <div className="text-green-600">Poll created! Redirecting...</div>}
       <Button 
         type="submit"
         disabled={isPending}
+        className="w-full"
       >
         {isPending ? (
           <>

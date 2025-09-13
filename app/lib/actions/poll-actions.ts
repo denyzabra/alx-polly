@@ -14,6 +14,7 @@
 import { createClient } from "@/app/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import { Poll, Vote, ActionResponse, VoteCount } from "@/app/lib/types";
+import { redirect } from "next/navigation";
 
 /**
  * Creates a new poll with the provided form data
@@ -68,6 +69,52 @@ export async function createPoll(formData: FormData): Promise<ActionResponse> {
   revalidatePath("/polls");
   return { error: null, data: data as Poll };
 }
+
+/**
+ * Action to create a new poll, designed for use with useActionState.
+ * Handles form submission, data validation, and redirection on success.
+ *
+ * @param prevState - The previous state from useActionState.
+ * @param formData - FormData object containing the poll question and options.
+ * @returns An object with an error message, or redirects on success.
+ */
+export async function createPollAction(
+  prevState: { error: string | null },
+  formData: FormData
+): Promise<{ error: string | null }> {
+  const supabase = await createClient();
+
+  const question = formData.get("question") as string;
+  const options = formData.getAll("options").filter(Boolean) as string[];
+
+  if (!question || options.length < 2) {
+    return { error: "Please provide a question and at least two options." };
+  }
+
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
+  if (userError || !user) {
+    return { error: "You must be logged in to create a poll." };
+  }
+
+  const { error } = await supabase.from("polls").insert([
+    {
+      user_id: user.id,
+      question,
+      options,
+    },
+  ]);
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  revalidatePath("/polls");
+  redirect("/polls");
+}
+
 
 /**
  * Get polls created by the current user
