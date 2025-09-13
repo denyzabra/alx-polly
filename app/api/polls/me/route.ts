@@ -1,28 +1,23 @@
-import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
+import { getUserPolls } from "@/app/lib/actions/poll-actions";
 
+/**
+ * @deprecated Use server actions directly instead of API routes
+ * This route is kept for backward compatibility
+ */
 export async function GET(request: Request) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
+  const { polls, error } = await getUserPolls();
+  
+  if (error === "Not authenticated") {
     return NextResponse.json(
       { polls: [], error: "Not authenticated" },
       { status: 401 }
     );
   }
-
-  const { data, error } = await supabase
-    .from("polls")
-    .select("*")
-    .eq("user_id", user.id)
-    .order("created_at", { ascending: false });
-
+  
   if (error) {
-    return NextResponse.json({ polls: [], error: error.message }, { status: 500 });
+    return NextResponse.json({ polls: [], error }, { status: 500 });
   }
 
-  return NextResponse.json({ polls: data ?? [] });
+  return NextResponse.json({ polls });
 }

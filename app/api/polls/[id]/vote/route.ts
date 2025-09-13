@@ -1,11 +1,14 @@
-import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
+import { submitVote } from "@/app/lib/actions/poll-actions";
 
+/**
+ * @deprecated Use server actions directly instead of API routes
+ * This route is kept for backward compatibility
+ */
 export async function POST(
   request: Request,
   { params }: { params: { id: string } }
 ) {
-  const supabase = await createClient();
   const { id: pollId } = params;
 
   let optionIndex: number;
@@ -22,20 +25,10 @@ export async function POST(
     );
   }
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const result = await submitVote(pollId, optionIndex);
 
-  const { error } = await supabase.from("votes").insert([
-    {
-      poll_id: pollId,
-      user_id: user?.id ?? null,
-      option_index: optionIndex,
-    },
-  ]);
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  if (result.error) {
+    return NextResponse.json({ error: result.error }, { status: 500 });
   }
 
   return NextResponse.json({ success: true });

@@ -11,8 +11,9 @@
  * All database operations use Supabase as the underlying data store.
  */
 
-import { createClient } from "@/lib/supabase/server";
+import { createClient } from "@/app/lib/supabase/server";
 import { revalidatePath } from "next/cache";
+import { Poll, Vote, ActionResponse, VoteCount } from "@/app/lib/types";
 
 /**
  * Creates a new poll with the provided form data
@@ -22,7 +23,7 @@ import { revalidatePath } from "next/cache";
  * the poll record with the user's ID and the provided poll details.
  * 
  * @param formData - FormData object containing the poll question and options
- * @returns Object with error status (null if successful)
+ * @returns ActionResponse with error status (null if successful)
  * @example
  * // In a form submit handler:
  * const result = await createPoll(formData);
@@ -30,7 +31,7 @@ import { revalidatePath } from "next/cache";
  *   // Poll created successfully
  * }
  */
-export async function createPoll(formData: FormData) {
+export async function createPoll(formData: FormData): Promise<ActionResponse> {
   const supabase = await createClient();
 
   const question = formData.get("question") as string;
@@ -52,13 +53,168 @@ export async function createPoll(formData: FormData) {
     return { error: "You must be logged in to create a poll." };
   }
 
-  const { error } = await supabase.from("polls").insert([
+  const { data, error } = await supabase.from("polls").insert([
     {
       user_id: user.id,
       question,
       options,
     },
-  ]);
+  ]).select().single();
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  revalidatePath("/polls");
+  return { error: null, data: data as Poll };
+}
+
+/**
+ * Get polls created by the current user
+ * 
+ * @returns ActionResponse with array of Poll objects or error
+ */
+export async function getUserPolls(): Promise<ActionResponse> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Not authenticated", data: [] as Poll[] };
+
+  const { data, error } = await supabase
+    .from("polls")
+    .select("*")
+    .eq("user_id", user.id)
+    .order("created_at", { ascending: false });
+
+  if (error) return { error: error.message, data: [] as Poll[] };
+  return { error: null, data: data as Poll[] };
+}
+
+/**
+ * Get a poll by its ID, including vote counts
+ * 
+ * @param id - The ID of the poll to retrieve
+ * @returns ActionResponse with Poll object or error
+ */
+export async function getPollById(id: string): Promise<ActionResponse> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("polls")
+    .select("*")
+    .eq("id", id)
+    .single();
+
+  if (error) return { error: error.message };
+  return { error: null, data: data as Poll };
+}
+
+/**
+ * Submit a vote for a specific poll option
+ * 
+ * @param pollId - The ID of the poll to vote on
+ * @param optionIndex - The index of the option to vote for
+ * @returns ActionResponse with error status (null if successful)
+ */
+export async function submitVote(pollId: string, optionIndex: number): Promise<ActionResponse> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  // Optionally require login to vote
+  // if (!user) return { error: 'You must be logged in to vote.' };
+
+  // Check if poll exists
+  const { data: poll, error: pollError } = await supabase
+    .from("polls")
+    .select("id")
+    .eq("id", pollId)
+    .single();
+
+  if (pollError) {
+    return { error: "Poll not found" };
+  }
+
+  // Check if user has already voted (if user is logged in)
+  if (user) {
+    const { data: existingVote, error: voteCheckError } = await supabase
+      .from("votes")
+      .select("id")
+      .eq("poll_id", pollId)
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    if (existingVote) {
+      return { error: "You have already voted on this poll" };
+    }
+  }
+
+  // Submit the vote
+  const { data: voteData, error } = await supabase.from("votes").insert([
+    {
+      poll_id: pollId,
+      user_id: user?.id ?? null,
+      option_index: optionIndex,
+    },
+  ]).select().single();
+
+  if (error) return { error: error.message };
+  
+  // Revalidate the poll page to show updated results
+  revalidatePath(`/polls/${pollId}`);
+  return { error: null, data: voteData as Vote };
+}
+
+/**
+ * Delete a poll by its ID
+ * 
+ * @param pollId - The ID of the poll to delete
+ * @returns ActionResponse with error status (null if successful)
+ */
+export async function deletePoll(pollId: string): Promise<ActionResponse> {
+  const supabase = await createClient();
+
+  // Get user from session
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
+  if (userError) {
+    return { error: userError.message };
+  }
+  if (!user) {
+    return { error: "You must be logged in to delete a poll." };
+  }
+
+  // Check if poll exists and is owned by the user
+  const { data: poll, error: pollError } = await supabase
+    .from("polls")
+    .select("id")
+    .eq("id", pollId)
+    .eq("user_id", user.id)
+    .single();
+
+  if (pollError) {
+    return { error: "Poll not found or you don't have permission to delete it." };
+  }
+
+  // Delete votes first to maintain referential integrity
+  const { error: votesError } = await supabase
+    .from("votes")
+    .delete()
+    .eq("poll_id", pollId);
+
+  if (votesError) {
+    return { error: `Failed to delete votes: ${votesError.message}` };
+  }
+
+  // Delete the poll
+  const { error } = await supabase
+    .from("polls")
+    .delete()
+    .eq("id", pollId)
+    .eq("user_id", user.id);
 
   if (error) {
     return { error: error.message };
@@ -68,69 +224,13 @@ export async function createPoll(formData: FormData) {
   return { error: null };
 }
 
-// GET USER POLLS
-export async function getUserPolls() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { polls: [], error: "Not authenticated" };
-
-  const { data, error } = await supabase
-    .from("polls")
-    .select("*")
-    .eq("user_id", user.id)
-    .order("created_at", { ascending: false });
-
-  if (error) return { polls: [], error: error.message };
-  return { polls: data ?? [], error: null };
-}
-
-// GET POLL BY ID
-export async function getPollById(id: string) {
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("polls")
-    .select("*")
-    .eq("id", id)
-    .single();
-
-  if (error) return { poll: null, error: error.message };
-  return { poll: data, error: null };
-}
-
-// SUBMIT VOTE
-export async function submitVote(pollId: string, optionIndex: number) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  // Optionally require login to vote
-  // if (!user) return { error: 'You must be logged in to vote.' };
-
-  const { error } = await supabase.from("votes").insert([
-    {
-      poll_id: pollId,
-      user_id: user?.id ?? null,
-      option_index: optionIndex,
-    },
-  ]);
-
-  if (error) return { error: error.message };
-  return { error: null };
-}
-
-// DELETE POLL
-export async function deletePoll(id: string) {
-  const supabase = await createClient();
-  const { error } = await supabase.from("polls").delete().eq("id", id);
-  if (error) return { error: error.message };
-  revalidatePath("/polls");
-  return { error: null };
-}
-
-// UPDATE POLL
+/**
+ * Update an existing poll with new question and options
+ * 
+ * @param pollId - The ID of the poll to update
+ * @param formData - FormData object containing the updated poll question and options
+ * @returns Object with error status (null if successful)
+ */
 export async function updatePoll(pollId: string, formData: FormData) {
   const supabase = await createClient();
 
@@ -164,5 +264,10 @@ export async function updatePoll(pollId: string, formData: FormData) {
     return { error: error.message };
   }
 
+  // Revalidate paths to update UI
+  revalidatePath(`/polls/${pollId}`);
+  revalidatePath(`/polls/${pollId}/edit`);
+  revalidatePath('/polls');
+  
   return { error: null };
 }

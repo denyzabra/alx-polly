@@ -1,76 +1,53 @@
-import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
+import { getPollById } from "@/app/lib/actions/poll-actions";
 
+/**
+ * @deprecated Use server actions directly instead of API routes
+ * This route is kept for backward compatibility
+ */
 export async function GET(
   request: Request,
   { params }: { params: { id: string } }
 ) {
-  const supabase = await createClient();
-  const { id } = params;
+  const { poll, error } = await getPollById(params.id);
 
-  const { data, error } = await supabase
-    .from("polls")
-    .select("*")
-    .eq("id", id)
-    .single();
-
-  if (error) {
+  if (error || !poll) {
     return NextResponse.json(
-      { poll: null, error: "Poll not found." },
+      { poll: null, error: error || "Poll not found." },
       { status: 404 }
     );
   }
-  return NextResponse.json({ poll: data });
+  return NextResponse.json({ poll });
 }
 
+import { updatePoll } from "@/app/lib/actions/poll-actions";
+
+/**
+ * @deprecated Use server actions directly instead of API routes
+ * This route is kept for backward compatibility
+ */
 export async function PUT(
   request: Request,
   { params }: { params: { id: string } }
 ) {
-  const supabase = await createClient();
-  const { id } = params;
   const formData = await request.formData();
+  const result = await updatePoll(params.id, formData);
 
-  const question = formData.get("question") as string;
-  const options = formData.getAll("options").filter(Boolean) as string[];
+  if (result.error) {
+    // Determine appropriate status code based on error message
+    let statusCode = 500;
+    if (result.error.includes("not logged in") || result.error.includes("must be logged in")) {
+      statusCode = 401;
+    } else if (result.error.includes("provide a question")) {
+      statusCode = 400;
+    }
 
-  if (!question || options.length < 2) {
-    return NextResponse.json(
-      { error: "Please provide a question and at least two options." },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: result.error }, { status: statusCode });
   }
 
-  const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser();
-  if (userError) {
-    return NextResponse.json({ error: userError.message }, { status: 401 });
-  }
-  if (!user) {
-    return NextResponse.json(
-      { error: "You must be logged in to update a poll." },
-      { status: 401 }
-    );
-  }
-
-  const { data, error } = await supabase
-    .from("polls")
-    .update({ question, options })
-    .eq("id", id)
-    .eq("user_id", user.id)
-    .select()
-    .single();
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-
-  revalidatePath(`/polls/${id}`);
-  revalidatePath("/polls");
-  return NextResponse.json({ poll: data });
+  // The updatePoll function already handles revalidation
+  return NextResponse.json({ success: true });
 }
 
 export async function DELETE(
