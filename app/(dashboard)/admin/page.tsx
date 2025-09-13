@@ -82,9 +82,9 @@ export default async function AdminPage() {
               <div className="space-y-2">
                 <h4 className="font-medium">Options:</h4>
                 <ul className="list-disc list-inside space-y-1">
-                  {poll.options.map((option: { text: string; votes: number }, index: number) => (
+                  {poll.options.map((option, index) => (
                     <li key={index} className="text-gray-700">
-                      {option.text} ({option.votes} votes)
+                      {option}
                     </li>
                   ))}
                 </ul>

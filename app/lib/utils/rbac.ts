@@ -25,74 +25,49 @@ export enum UserRole {
 }
 
 /**
- * Checks if the current authenticated user has one of the required roles
- * 
- * This function verifies if the currently logged-in user has sufficient
- * permissions by checking if their assigned role matches any of the roles
- * in the required roles array. It first retrieves the user's session,
- * then fetches their role from the profiles table in the database.
- * 
- * @param requiredRoles - Array of roles that are allowed to access the resource
- * @returns Promise resolving to boolean indicating if user has sufficient permissions
- * @example
- * // Check if user can access admin features
- * const canAccess = await checkUserRole([UserRole.ADMIN]);
- * 
- * // Check if user can access moderator or admin features
- * const canModerate = await checkUserRole([UserRole.MODERATOR, UserRole.ADMIN]);
+ * Check if the current user has the required role
+ * @param requiredRole - The role required to access a resource
+ * @returns Object containing whether the user is authorized and their role
  */
-export async function checkUserRole(requiredRoles: UserRole[]): Promise<boolean> {
-  const supabase = createClient();
+export async function checkUserRole(requiredRole: UserRole): Promise<{ authorized: boolean; role: UserRole | null }> {
+  const supabase = await createClient();
   
-  // Get the current user session from Supabase auth
-  const { data: { session } } = await supabase.auth.getSession();
+  // Get the current user
+  const { data: { user } } = await supabase.auth.getUser();
   
-  // If no active session exists, user is not authenticated
-  if (!session) {
-    return false;
+  if (!user) {
+    return { authorized: false, role: null };
   }
   
-  // Get the user's role from the profiles table in the database
-  const { data: profile } = await supabase
-    .from('profiles')
+  // Get user's role from the database
+  const { data, error } = await supabase
+    .from('user_roles')
     .select('role')
-    .eq('id', session.user.id)
+    .eq('user_id', user.id)
     .single();
   
-  // If profile doesn't exist or has no role, deny access
-  if (!profile) {
-    return false;
+  if (error || !data) {
+    // Default to regular user if no role is found
+    const userRole = UserRole.USER;
+    return { authorized: userRole === requiredRole, role: userRole };
   }
   
-  // Check if the user's assigned role is included in the required roles list
-  return requiredRoles.includes(profile.role as UserRole);
+  const userRole = data.role as UserRole;
+  
+  return { 
+    authorized: userRole === requiredRole,
+    role: userRole
+  };
 }
 
 /**
- * Higher-order function to protect routes based on user role requirements
- * 
- * This function creates a route protection middleware that checks if the
- * current user has sufficient permissions to access a protected route.
- * If the user lacks the required role, they are redirected to an unauthorized page.
- * 
- * @param requiredRoles - Array of roles that are allowed to access the route
- * @returns Async function that can be used as middleware for route protection
- * @example
- * // In a route handler:
- * export default async function AdminPage() {
- *   // This will redirect to /unauthorized if user is not an admin
- *   await withRoleProtection([UserRole.ADMIN])();
- *   
- *   return <AdminDashboard />;
- * }
+ * Middleware to protect routes based on user role
+ * @param requiredRole - The role required to access the route
  */
-export function withRoleProtection(requiredRoles: UserRole[]) {
-  return async function protectRoute() {
-    const hasAccess = await checkUserRole(requiredRoles);
-    
-    if (!hasAccess) {
-      // Redirect unauthorized users to the unauthorized page
-      redirect('/unauthorized');
-    }
-  };
+export async function withRoleProtection(requiredRole: UserRole) {
+  const { authorized } = await checkUserRole(requiredRole);
+  
+  if (!authorized) {
+    throw new Error('Unauthorized: You do not have permission to access this resource');
+  }
 }

@@ -176,20 +176,6 @@ export async function register(data: RegisterFormData, clientIp?: string) {
     return { error: 'An unexpected error occurred. Please try again later.' };
   }
 }
-/**
- * Logs out the current user and ends their session
- * 
- * This function signs the user out of their current session using Supabase Auth
- * and handles any errors that might occur during the logout process.
- * 
- * @returns Object with error message if logout fails, or null on success
- * @example
- * // In a logout button handler:
- * const result = await logout();
- * if (result.error) {
- *   // Handle error
- * }
- */
 export async function logout() {
   const supabase = await createClient();
   const { error } = await supabase.auth.signOut();
@@ -199,41 +185,12 @@ export async function logout() {
   return { error: null };
 }
 
-/**
- * Retrieves the currently authenticated user
- * 
- * This function fetches the current user's information from their active session.
- * It's useful for getting user details for display or authorization checks.
- * 
- * @returns The current user object or null if not authenticated
- * @example
- * // In a server component:
- * const user = await getCurrentUser();
- * if (user) {
- *   // User is authenticated
- * }
- */
 export async function getCurrentUser() {
   const supabase = await createClient();
   const { data } = await supabase.auth.getUser();
   return data.user;
 }
 
-/**
- * Retrieves the current authentication session
- * 
- * This function gets the active session data including the access token,
- * refresh token, and user information. It's useful for checking authentication
- * status and getting session tokens for API calls.
- * 
- * @returns The current session object or null if not authenticated
- * @example
- * // In a server component:
- * const session = await getSession();
- * if (session) {
- *   // User has an active session
- * }
- */
 export async function getSession() {
   const supabase = await createClient();
   const { data } = await supabase.auth.getSession();

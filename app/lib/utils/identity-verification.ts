@@ -153,21 +153,20 @@ export async function setVerificationStatus(userId: string, verified: boolean): 
  * }
  */
 export async function checkSuspiciousActivity(userId: string, fingerprint: string, userAgent: string): Promise<boolean> {
+  const supabase = await createClient();
   const cookieStore = await cookies();
-  const failedAttemptsCookie = cookieStore.get(`failed_attempts_${userId}`);
-  const failedAttempts = failedAttemptsCookie ? parseInt(failedAttemptsCookie.value, 10) : 0;
   
-  // Check if there are multiple failed login attempts
-  // Three or more failed attempts is considered suspicious behavior
-  if (failedAttempts >= 3) {
-    return true;
+  // Get the current session
+  const { data: { session } } = await supabase.auth.getSession();
+  
+  if (!session) {
+    return false;
   }
   
-  // Check if this is a new device by comparing against known devices
-  const userDevices = knownDevices.get(userId) || [];
-  const isNewDevice = !userDevices.some(device => device.fingerprint === fingerprint);
+  // Check for multiple active sessions
+  // This is a simplified check - in production, implement more sophisticated detection
+  const failedAttempts = parseInt(cookieStore.get('failedAttempts')?.value || '0');
   
-  // Combination of new device + any failed attempts is considered suspicious
-  // This helps prevent credential stuffing attacks using stolen credentials
-  return isNewDevice && failedAttempts > 0;
+  // If there have been multiple failed attempts, consider it suspicious
+  return failedAttempts >= 3;
 }

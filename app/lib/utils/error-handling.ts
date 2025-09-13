@@ -140,93 +140,47 @@ export function parseAuthError(error: any): ErrorDetails {
 }
 
 /**
- * Tracks failed authentication attempts for a specific identifier
- * 
- * This function increments a counter of failed login attempts for a given
- * identifier (typically an email address) and stores it in a secure HTTP-only cookie.
- * The counter is used to implement temporary account lockouts after too many
- * failed attempts, helping to prevent brute force attacks.
- * 
- * @param identifier - The identifier (usually email) to track failed attempts for
- * @returns The new number of failed attempts for this identifier
- * @example
- * if (loginFailed) {
- *   const attempts = await trackFailedAttempt(email);
- *   if (attempts >= 5) {
- *     return { error: 'Account locked. Please try again later.' };
- *   }
- * }
+ * Track failed authentication attempts
  */
 export async function trackFailedAttempt(identifier: string): Promise<number> {
   const cookieStore = await cookies();
-  // Base64 encode the identifier to avoid special characters in cookie names
   const cookieKey = `failed_${Buffer.from(identifier).toString('base64')}`;
   
-  // Get current attempt count or default to 0
   const currentAttempts = parseInt(cookieStore.get(cookieKey)?.value || '0');
   const newAttempts = currentAttempts + 1;
   
-  // Store the updated count in a secure HTTP-only cookie
   cookieStore.set(cookieKey, newAttempts.toString(), {
-    httpOnly: true,    // Prevents JavaScript access to the cookie
-    secure: true,      // Only sent over HTTPS connections
-    maxAge: 15 * 60,   // Cookie expires after 15 minutes
-    path: '/'          // Cookie is available across the entire site
+    httpOnly: true,
+    secure: true, // Always use secure in production
+    maxAge: 15 * 60, // 15 minutes
+    path: '/'
   });
   
   return newAttempts;
 }
 
 /**
- * Resets the failed authentication attempts counter for a specific identifier
- * 
- * This function is typically called after a successful login to clear the
- * failed attempts counter. It sets the counter back to zero, allowing the user
- * to start with a clean slate.
- * 
- * @param identifier - The identifier (usually email) to reset failed attempts for
- * @example
- * if (loginSuccessful) {
- *   await resetFailedAttempts(email);
- *   // Proceed with successful login flow
- * }
+ * Reset failed authentication attempts
  */
 export async function resetFailedAttempts(identifier: string): Promise<void> {
   const cookieStore = await cookies();
   const cookieKey = `failed_${Buffer.from(identifier).toString('base64')}`;
   
-  // Reset the counter to 0 but keep the cookie with the same security settings
   cookieStore.set(cookieKey, '0', {
-    httpOnly: true,    // Prevents JavaScript access to the cookie
-    secure: true,      // Only sent over HTTPS connections
-    maxAge: 15 * 60,   // Cookie expires after 15 minutes
-    path: '/'          // Cookie is available across the entire site
+    httpOnly: true,
+    secure: true, // Always use secure in production
+    maxAge: 15 * 60,
+    path: '/'
   });
 }
 
 /**
- * Checks if an account should be temporarily locked due to too many failed attempts
- * 
- * This function determines if a user account should be temporarily locked
- * based on the number of recent failed login attempts. It's used to prevent
- * brute force attacks by implementing a temporary lockout after multiple failures.
- * 
- * @param identifier - The identifier (usually email) to check lock status for
- * @returns Boolean indicating if the account should be locked
- * @example
- * if (await isAccountLocked(email)) {
- *   return { error: 'Account temporarily locked. Please try again later.' };
- * }
- * // Proceed with normal authentication flow
+ * Check if account should be temporarily locked
  */
 export async function isAccountLocked(identifier: string): Promise<boolean> {
   const cookieStore = await cookies();
   const cookieKey = `failed_${Buffer.from(identifier).toString('base64')}`;
   
-  // Get the current number of failed attempts
   const attempts = parseInt(cookieStore.get(cookieKey)?.value || '0');
-  
-  // Lock the account after 5 failed attempts
-  // This threshold should match the MAX_ATTEMPTS in rate-limiter.ts
-  return attempts >= 5;
+  return attempts >= 5; // Lock after 5 failed attempts
 }
